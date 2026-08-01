@@ -1,5 +1,6 @@
 # Local market data, research outputs, and runtime state
 data/
+data_15m/
 data_36m/
 optimization_*/
 results*/
