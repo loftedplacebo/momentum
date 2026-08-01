@@ -1,0 +1,15 @@
+# Local market data, research outputs, and runtime state
+data/
+data_36m/
+optimization_*/
+results*/
+state/
+
+# Python and local process artifacts
+__pycache__/
+*.py[cod]
+*.log
+*.err
+
+# One-off local research helper
+validate_time_stop.py

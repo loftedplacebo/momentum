@@ -1,0 +1,16 @@
+{
+  "name": "momentum-v1-36m-testnet",
+  "winner": {
+    "long_short_count": 2,
+    "rank_exit_threshold": 10,
+    "stop_loss_pct": 0.02,
+    "trailing_profit_pct": 0.02,
+    "trailing_activation_pct": 0.06,
+    "breakout_lookback_hours": 36,
+    "max_pairwise_correlation": 0.7,
+    "time_stop_hours": 48,
+    "min_abs_score": 1.25,
+    "max_gross_leverage": 1.5,
+    "max_position_equity_fraction": 0.15
+  }
+}
