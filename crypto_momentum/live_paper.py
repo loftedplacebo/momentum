@@ -40,7 +40,10 @@ class TestnetPaperPortfolio:
         if state.get("last_completed_bar") == str(common_bar):
             return {"status": "unchanged", "completed_bar": str(common_bar), "positions": state["positions"],
                     "equity": state["equity"], "markets_loaded": len(prices)}
-        signals = build_signal_frame(prices, self.config)
+        latest_funding = self.client.latest_funding_rates()
+        funding = {symbol: pd.Series({common_bar: latest_funding.get(symbol, 0.0)}) for symbol in prices}
+        self._apply_funding(state, prices, common_bar, int(now.timestamp() * 1000))
+        signals = build_signal_frame(prices, self.config, funding)
         ranked = ranks_at(signals, common_bar)
         exits = self._apply_exits(state, prices, ranked, common_bar)
         entries = self._apply_entries(state, prices, ranked, common_bar)
@@ -53,6 +56,21 @@ class TestnetPaperPortfolio:
         return {"status": "processed", "completed_bar": str(common_bar), "markets_requested": len(requested),
                 "markets_loaded": len(prices), "unavailable_symbols": unavailable, "equity": state["equity"],
                 "cash": state["cash"], "positions": list(state["positions"].values()), "entries": entries, "exits": exits}
+
+    def _apply_funding(self, state: dict[str, Any], prices: dict[str, pd.DataFrame], timestamp: pd.Timestamp,
+                       now_ms: int) -> None:
+        """Apply every newly published funding event once; positive rates mean longs pay shorts."""
+        for symbol, position in state["positions"].items():
+            if symbol not in prices:
+                continue
+            after_ms = int(position.get("last_funding_time_ms", pd.Timestamp(position["entry_time"]).timestamp() * 1000)) + 1
+            for event in self.client.funding_history(symbol, after_ms):
+                funding_time = int(event["fundingTime"])
+                if funding_time > now_ms:
+                    continue
+                payment = position["side"] * position["quantity"] * float(prices[symbol].at[timestamp, "close"]) * float(event["fundingRate"])
+                state["cash"] -= payment
+                position["last_funding_time_ms"] = funding_time
 
     def _load_state(self) -> dict[str, Any]:
         if self.state_file.exists():
@@ -142,7 +160,8 @@ class TestnetPaperPortfolio:
             state["cash"] -= fee
             position = {"symbol": row.symbol, "side": side, "quantity": quantity, "entry_price": fill,
                         "entry_time": str(timestamp), "highest_price": fill, "lowest_price": fill, "entry_fee": fee,
-                        "stop_loss_pct": self.config.stop_loss_pct, "score": float(row.score)}
+                        "stop_loss_pct": self.config.stop_loss_pct, "score": float(row.score),
+                        "last_funding_time_ms": int(timestamp.timestamp() * 1000)}
             state["positions"][row.symbol] = position
             entries.append({"symbol": row.symbol, "side": "long" if side == 1 else "short", "notional_usdt": per_position,
                             "quantity": quantity, "entry_price": fill, "score": float(row.score)})

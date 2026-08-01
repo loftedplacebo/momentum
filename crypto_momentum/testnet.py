@@ -114,6 +114,16 @@ class BinanceFuturesTestnetClient:
                 errors[symbol] = str(exc)
         return prices, errors
 
+    def latest_funding_rates(self) -> dict[str, float]:
+        """Latest published funding rate for every available USD(S)-M contract."""
+        rows = self._request("GET", "/fapi/v1/premiumIndex")
+        if isinstance(rows, dict):
+            rows = [rows]
+        return {row["symbol"]: float(row.get("lastFundingRate", 0.0)) for row in rows}
+
+    def funding_history(self, symbol: str, after_ms: int) -> list[dict]:
+        return self._request("GET", "/fapi/v1/fundingRate", {"symbol": symbol, "startTime": after_ms, "limit": 20})
+
     @staticmethod
     def quantity_for_notional(notional_usdt: float, mark_price: float, rules: SymbolRules) -> str:
         raw = Decimal(str(notional_usdt)) / Decimal(str(mark_price))
