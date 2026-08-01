@@ -24,9 +24,15 @@ def main() -> None:
     down.add_argument("--months", type=int, default=12)
     down.add_argument("--data-dir", type=Path, default=Path("data"))
     down.add_argument("--combined-file", type=Path, default=None)
+    down.add_argument("--interval", choices=("15m", "1h"), default="1h")
     run = sub.add_parser("backtest")
     run.add_argument("--data-dir", type=Path, default=Path("data"))
     run.add_argument("--output-dir", type=Path, default=Path("results"))
+    winning = sub.add_parser("backtest-winning", help="Run the selected strategy at a time-equivalent candle interval.")
+    winning.add_argument("--data-dir", type=Path, default=Path("data"))
+    winning.add_argument("--output-dir", type=Path, default=Path("results_winning"))
+    winning.add_argument("--strategy-selection", type=Path, default=Path("strategy_v1.json"))
+    winning.add_argument("--bar-minutes", type=int, choices=(15, 60), default=60)
     paper = sub.add_parser("paper")
     paper.add_argument("--data-dir", type=Path, default=Path("data"))
     paper.add_argument("--state-file", type=Path, default=Path("state/paper.json"))
@@ -90,7 +96,7 @@ def main() -> None:
         snapshot = BinanceUniverseProvider(download_config).select()
         snapshot.save(universe_path)
         start, end = default_date_range(args.months)
-        BinanceKlineDownloader().download(snapshot.symbols, start, end, args.data_dir)
+        BinanceKlineDownloader(args.interval).download(snapshot.symbols, start, end, args.data_dir)
         if args.combined_file:
             combine_price_data(args.data_dir, snapshot.symbols, args.combined_file)
         print(f"Saved {len(snapshot.symbols)} symbols to {args.data_dir}")
@@ -112,6 +118,32 @@ def main() -> None:
         return
     funding = load_funding_data(args.data_dir, snapshot.symbols)
     open_interest = load_open_interest_data(args.data_dir, snapshot.symbols)
+    if args.command == "backtest-winning":
+        selected = json.loads(args.strategy_selection.read_text())["winner"]
+        side_count = int(selected["long_short_count"])
+        scale = 60 // args.bar_minutes
+        config = replace(
+            config, long_count=side_count, short_count=side_count, max_positions=side_count * 2,
+            rank_exit_threshold=int(selected["rank_exit_threshold"]), stop_loss_pct=float(selected["stop_loss_pct"]),
+            trailing_profit_pct=float(selected["trailing_profit_pct"]), trailing_activation_pct=float(selected["trailing_activation_pct"]),
+            breakout_lookback_hours=int(selected["breakout_lookback_hours"]) * scale,
+            max_pairwise_correlation=float(selected["max_pairwise_correlation"]), time_stop_hours=int(selected["time_stop_hours"]) * scale,
+            min_abs_score=float(selected["min_abs_score"]), max_gross_leverage=float(selected["max_gross_leverage"]),
+            max_position_equity_fraction=float(selected["max_position_equity_fraction"]),
+            momentum_hours=tuple(hours * scale for hours in config.momentum_hours),
+            fast_ma_hours=config.fast_ma_hours * scale, slow_ma_hours=config.slow_ma_hours * scale,
+            rsi_hours=config.rsi_hours * scale, volume_lookback_hours=config.volume_lookback_hours * scale,
+            atr_hours=config.atr_hours * scale, correlation_lookback_hours=config.correlation_lookback_hours * scale,
+        )
+        result = MomentumBacktester(config).run(prices, build_signal_frame(prices, config, funding, open_interest), funding)
+        summary, monthly = performance_summary(result, config)
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        result.equity.to_csv(args.output_dir / "equity.csv")
+        result.trades.to_csv(args.output_dir / "trades.csv", index=False)
+        monthly.to_csv(args.output_dir / "monthly.csv")
+        (args.output_dir / "summary.json").write_text(json.dumps(summary, indent=2, default=float))
+        print(json.dumps(summary, indent=2, default=float))
+        return
     if args.command == "optimize":
         config = replace(config, fixed_position_notional=args.fixed_trade_notional)
         table, selection = run_walk_forward_search(prices, funding, open_interest, config, args.max_scenarios,

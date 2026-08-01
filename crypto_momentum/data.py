@@ -11,9 +11,14 @@ from .universe import BASE_URL, UniverseSnapshot
 
 
 class BinanceKlineDownloader:
-    """Downloads completed 1h candles and persists one CSV per symbol."""
+    """Downloads completed Binance candles at the chosen interval."""
 
-    def __init__(self, session: requests.Session | None = None):
+    INTERVAL_MS = {"15m": 900_000, "1h": 3_600_000}
+
+    def __init__(self, interval: str = "1h", session: requests.Session | None = None):
+        if interval not in self.INTERVAL_MS:
+            raise ValueError(f"Unsupported interval {interval}.")
+        self.interval = interval
         self.session = session or requests.Session()
 
     def download(self, symbols: list[str], start: datetime, end: datetime, data_dir: Path) -> None:
@@ -35,14 +40,14 @@ class BinanceKlineDownloader:
         rows = []
         while cursor < end_ms:
             response = self.session.get(BASE_URL + "/fapi/v1/klines", params={
-                "symbol": symbol, "interval": "1h", "startTime": cursor, "endTime": end_ms, "limit": 1500,
+                "symbol": symbol, "interval": self.interval, "startTime": cursor, "endTime": end_ms, "limit": 1500,
             }, timeout=30)
             response.raise_for_status()
             batch = response.json()
             if not batch:
                 break
             rows.extend(batch)
-            cursor = int(batch[-1][0]) + 3_600_000
+            cursor = int(batch[-1][0]) + self.INTERVAL_MS[self.interval]
             time.sleep(0.05)
         columns = ["open_time", "open", "high", "low", "close", "volume", "close_time", "quote_volume", "trades", "taker_buy_base", "taker_buy_quote", "ignore"]
         frame = pd.DataFrame(rows, columns=columns)
