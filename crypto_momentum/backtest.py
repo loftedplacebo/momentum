@@ -50,6 +50,7 @@ class MomentumBacktester:
         rows: list[dict] = []
         stop_times: list[pd.Timestamp] = []
         cooldown_until: pd.Timestamp | None = None
+        symbol_cooldowns: dict[str, pd.Timestamp] = {}
         for idx, timestamp in enumerate(all_times[:-1]):
             next_time = all_times[idx + 1]
             rank = rank_cache.get(timestamp)
@@ -61,6 +62,8 @@ class MomentumBacktester:
                 cash += self._close(positions.pop(symbol), exit_price, next_time, reason, trades)
                 if reason == "stop_loss":
                     stop_times.append(next_time)
+                    if self.config.post_stop_cooldown_bars:
+                        symbol_cooldowns[symbol] = next_time + (next_time - timestamp) * self.config.post_stop_cooldown_bars
             if self.config.stop_cluster_threshold:
                 window_start = next_time - pd.Timedelta(hours=self.config.stop_cluster_window_hours)
                 stop_times = [time for time in stop_times if time >= window_start]
@@ -72,18 +75,23 @@ class MomentumBacktester:
             for symbol, side in targets:
                 if symbol in positions or len(positions) >= self.config.max_positions:
                     continue
+                if next_time < symbol_cooldowns.get(symbol, next_time):
+                    continue
                 if not self._correlation_ok(symbol, positions, return_arrays, idx):
                     continue
                 open_price = float(prices[symbol].at[next_time, "open"])
                 fill = self._fill(open_price, side, entering=True)
+                signal_atr = float(rank.set_index("symbol").at[symbol, "atr_pct"])
+                stop_pct = self.config.stop_loss_atr_multiple * signal_atr if self.config.stop_loss_atr_multiple else self.config.stop_loss_pct
                 leverage_cap = equity_before * self.config.max_gross_leverage / self.config.max_positions
                 fraction_cap = equity_before * self.config.max_position_equity_fraction if self.config.max_position_equity_fraction else leverage_cap
-                notional = min(self.config.fixed_position_notional, leverage_cap, fraction_cap) if self.config.fixed_position_notional else min(leverage_cap, fraction_cap)
+                risk_cap = equity_before * self.config.position_risk_fraction / stop_pct if self.config.position_risk_fraction else float("inf")
+                notional = min(self.config.fixed_position_notional, leverage_cap, fraction_cap, risk_cap) if self.config.fixed_position_notional else min(leverage_cap, fraction_cap, risk_cap)
+                if self.config.high_volatility_atr_pct and signal_atr >= self.config.high_volatility_atr_pct:
+                    notional *= self.config.high_volatility_size_multiplier
                 qty = notional / fill
                 fee = notional * self.config.taker_fee_rate
                 cash -= fee
-                signal_atr = float(rank.set_index("symbol").at[symbol, "atr_pct"])
-                stop_pct = self.config.stop_loss_atr_multiple * signal_atr if self.config.stop_loss_atr_multiple else self.config.stop_loss_pct
                 positions[symbol] = Position(symbol, side, qty, fill, next_time, fill, fill, fee, stop_pct)
             funding = self._apply_funding(positions, prices, next_time, funding_rates or {})
             cash -= funding

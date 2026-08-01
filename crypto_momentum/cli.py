@@ -9,7 +9,7 @@ from .backtest import MomentumBacktester
 from .config import BacktestConfig
 from .data import BinanceKlineDownloader, combine_price_data, default_date_range, load_funding_data, load_open_interest_data, load_price_data
 from .paper import PaperTrader
-from .optimizer import run_walk_forward_search, save_search, targeted_risk_grid
+from .optimizer import active_15m_risk_grid, run_walk_forward_search, save_search, targeted_risk_grid
 from .reporting import performance_summary
 from .signals import build_signal_frame
 from .universe import BinanceUniverseProvider, UniverseSnapshot
@@ -33,6 +33,11 @@ def main() -> None:
     winning.add_argument("--output-dir", type=Path, default=Path("results_winning"))
     winning.add_argument("--strategy-selection", type=Path, default=Path("strategy_v1.json"))
     winning.add_argument("--bar-minutes", type=int, choices=(15, 60), default=60)
+    active_risk = sub.add_parser("optimize-15m-risk", help="Robustness grid for the active 15-minute winning strategy.")
+    active_risk.add_argument("--data-dir", type=Path, default=Path("data_15m"))
+    active_risk.add_argument("--output-dir", type=Path, default=Path("optimization_15m_risk"))
+    active_risk.add_argument("--strategy-selection", type=Path, default=Path("strategy_v1.json"))
+    active_risk.add_argument("--max-scenarios", type=int, default=36)
     paper = sub.add_parser("paper")
     paper.add_argument("--data-dir", type=Path, default=Path("data"))
     paper.add_argument("--state-file", type=Path, default=Path("state/paper.json"))
@@ -143,6 +148,30 @@ def main() -> None:
         monthly.to_csv(args.output_dir / "monthly.csv")
         (args.output_dir / "summary.json").write_text(json.dumps(summary, indent=2, default=float))
         print(json.dumps(summary, indent=2, default=float))
+        return
+    if args.command == "optimize-15m-risk":
+        selected = json.loads(args.strategy_selection.read_text())["winner"]
+        side_count = int(selected["long_short_count"])
+        scale = 4
+        base_config = replace(
+            config, long_count=side_count, short_count=side_count, max_positions=side_count * 2,
+            rank_exit_threshold=int(selected["rank_exit_threshold"]), stop_loss_pct=float(selected["stop_loss_pct"]),
+            trailing_profit_pct=float(selected["trailing_profit_pct"]), trailing_activation_pct=float(selected["trailing_activation_pct"]),
+            breakout_lookback_hours=int(selected["breakout_lookback_hours"]) * scale,
+            max_pairwise_correlation=float(selected["max_pairwise_correlation"]), time_stop_hours=int(selected["time_stop_hours"]) * scale,
+            min_abs_score=float(selected["min_abs_score"]), max_gross_leverage=float(selected["max_gross_leverage"]),
+            max_position_equity_fraction=float(selected["max_position_equity_fraction"]),
+            momentum_hours=tuple(hours * scale for hours in config.momentum_hours),
+            fast_ma_hours=config.fast_ma_hours * scale, slow_ma_hours=config.slow_ma_hours * scale,
+            rsi_hours=config.rsi_hours * scale, volume_lookback_hours=config.volume_lookback_hours * scale,
+            atr_hours=config.atr_hours * scale, correlation_lookback_hours=config.correlation_lookback_hours * scale,
+        )
+        configs = active_15m_risk_grid(base_config, args.max_scenarios)
+        table, selection = run_walk_forward_search(prices, funding, open_interest, base_config, configs=configs,
+                                                    progress_path=args.output_dir / "progress.json")
+        selection["research_scope"] = "Fixed active 15-minute momentum model; sizing, post-stop cooldown, entry confirmation and volatility throttle only."
+        save_search(args.output_dir, table, selection)
+        print(json.dumps(selection, indent=2, default=float))
         return
     if args.command == "optimize":
         config = replace(config, fixed_position_notional=args.fixed_trade_notional)

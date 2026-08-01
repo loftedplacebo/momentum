@@ -43,7 +43,10 @@ def build_signal_frame(prices: dict[str, pd.DataFrame], config: BacktestConfig,
         result["volume_change"] = np.log(frame["volume"].astype(float) / frame["volume"].rolling(config.volume_lookback_hours).median())
         previous_high = frame["high"].shift(1).rolling(config.breakout_lookback_hours).max()
         previous_low = frame["low"].shift(1).rolling(config.breakout_lookback_hours).min()
-        result["entry_ready"] = ((result["direction"] == 1) & (close > previous_high)) | ((result["direction"] == -1) & (close < previous_low))
+        entry_ready = ((result["direction"] == 1) & (close > previous_high)) | ((result["direction"] == -1) & (close < previous_low))
+        result["entry_ready"] = (entry_ready.rolling(config.entry_confirmation_bars,
+                                                        min_periods=config.entry_confirmation_bars).sum()
+                                 >= config.entry_confirmation_bars)
         if funding_rates and symbol in funding_rates:
             result["funding_rate"] = funding_rates[symbol].reindex(frame.index).ffill().fillna(0.0)
         else:

@@ -11,6 +11,8 @@ class BacktestConfig:
     # Optional fixed USDT notional per entry; capped by the gross-leverage rule.
     fixed_position_notional: float | None = None
     max_position_equity_fraction: float | None = None
+    # Optional loss-at-stop budget per position.  It controls size, not the signal.
+    position_risk_fraction: float | None = None
     max_positions: int = 10
     long_count: int = 5
     short_count: int = 5
@@ -36,6 +38,7 @@ class BacktestConfig:
     volume_lookback_hours: int = 24
     breakout_lookback_hours: int = 20
     require_breakout_entry: bool = True
+    entry_confirmation_bars: int = 1
     momentum_weight: float = 0.60
     ma_weight: float = 0.15
     rsi_weight: float = 0.10
@@ -47,6 +50,11 @@ class BacktestConfig:
     stop_cluster_window_hours: int = 24
     stop_cluster_threshold: int = 0
     stop_cluster_cooldown_hours: int = 0
+    # Prevent immediate re-entry in the same market after its stop is hit.
+    post_stop_cooldown_bars: int = 0
+    # Reduce, rather than disable, entries when a market's recent ATR is elevated.
+    high_volatility_atr_pct: float | None = None
+    high_volatility_size_multiplier: float = 1.0
     stablecoin_bases: FrozenSet[str] = field(default_factory=lambda: frozenset({
         "USDT", "USDC", "BUSD", "TUSD", "FDUSD", "DAI", "USDP", "USDD", "FRAX", "PYUSD",
     }))

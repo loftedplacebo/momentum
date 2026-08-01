@@ -87,6 +87,24 @@ def targeted_risk_grid(base: BacktestConfig, max_scenarios: int = 72) -> list[Ba
     return anchors + rng.sample(remaining, max_scenarios - len(anchors))
 
 
+def active_15m_risk_grid(base: BacktestConfig, max_scenarios: int = 36) -> list[BacktestConfig]:
+    """Small robustness grid; the momentum score and all exits remain fixed."""
+    configs = [replace(
+        base,
+        position_risk_fraction=risk_fraction,
+        post_stop_cooldown_bars=cooldown_bars,
+        entry_confirmation_bars=confirmation_bars,
+        high_volatility_atr_pct=volatility_threshold,
+        high_volatility_size_multiplier=0.5 if volatility_threshold else 1.0,
+    ) for risk_fraction, cooldown_bars, confirmation_bars, volatility_threshold in product(
+        (0.001, 0.002, 0.003),  # 0.10%, 0.20%, 0.30% of equity at the initial stop
+        (0, 4, 16),             # no cooldown, one hour, four hours
+        (1, 2),                 # immediate or two consecutive 15-minute bars
+        (None, 0.012),          # no throttle or half-size above the 90th-percentile ATR region
+    )]
+    return configs[:max_scenarios]
+
+
 def run_walk_forward_search(prices: dict[str, pd.DataFrame], funding_rates: dict[str, pd.Series],
                             open_interest: dict[str, pd.Series], base: BacktestConfig,
                             max_scenarios: int = 144, train_fraction: float = 0.8,
@@ -124,7 +142,8 @@ def run_walk_forward_search(prices: dict[str, pd.DataFrame], funding_rates: dict
     signal_cache: dict[int, pd.DataFrame] = {}
     records: list[dict] = []
     for scenario_id, config in enumerate(configs):
-        signals = signal_cache.setdefault(config.breakout_lookback_hours,
+        signal_key = (config.breakout_lookback_hours, config.entry_confirmation_bars)
+        signals = signal_cache.setdefault(signal_key,
             build_signal_frame(prices, config, funding_rates, open_interest))
         # Validation windows select parameters; the final 20% remains untouched.
         validation_summaries = []
@@ -160,6 +179,11 @@ def run_walk_forward_search(prices: dict[str, pd.DataFrame], funding_rates: dict
             "max_gross_leverage": config.max_gross_leverage,
             "max_position_equity_fraction": config.max_position_equity_fraction,
             "trailing_activation_pct": config.trailing_activation_pct,
+            "position_risk_fraction": config.position_risk_fraction,
+            "post_stop_cooldown_bars": config.post_stop_cooldown_bars,
+            "entry_confirmation_bars": config.entry_confirmation_bars,
+            "high_volatility_atr_pct": config.high_volatility_atr_pct,
+            "high_volatility_size_multiplier": config.high_volatility_size_multiplier,
         })
         if progress_path:
             progress_path.parent.mkdir(parents=True, exist_ok=True)
@@ -171,7 +195,7 @@ def run_walk_forward_search(prices: dict[str, pd.DataFrame], funding_rates: dict
     table = pd.DataFrame(records).sort_values("objective", ascending=False).reset_index(drop=True)
     winner_row = table.iloc[0]
     winner = configs[int(winner_row.scenario_id)]
-    signals = signal_cache[winner.breakout_lookback_hours]
+    signals = signal_cache[(winner.breakout_lookback_hours, winner.entry_confirmation_bars)]
     test_prices = {symbol: frame.loc[split:] for symbol, frame in prices.items()}
     test_signals = signals[signals.timestamp >= split]
     test_result = MomentumBacktester(winner).run(test_prices, test_signals, funding_rates)
