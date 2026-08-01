@@ -1,5 +1,9 @@
 # Crypto Momentum: Backtest and Paper Trading
 
+Start with [STRATEGY.md](STRATEGY.md) for the selected model and the differences
+between the `1hr` and `15m` projects. See [DEPLOYMENT.md](DEPLOYMENT.md) for
+GitHub, local setup and VPS paper-trading operations.
+
 A modular long/short momentum system for Binance USDT-margined perpetual futures.  The default implementation is deliberately **price-only**: it builds hourly cross-sectional momentum rankings and simulates execution without future data.  Funding, open interest, and order-book features have clear extension points but are not enabled by default.
 
 ## What it does
