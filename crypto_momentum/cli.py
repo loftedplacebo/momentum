@@ -14,6 +14,7 @@ from .reporting import performance_summary
 from .signals import build_signal_frame
 from .universe import BinanceUniverseProvider, UniverseSnapshot
 from .testnet import BinanceFuturesTestnetClient
+from .live_paper import TestnetPaperPortfolio
 
 
 def main() -> None:
@@ -44,13 +45,11 @@ def main() -> None:
     testnet.add_argument("--symbol", default="BTCUSDT")
     testnet.add_argument("--position-notional", type=float, default=5_000.0)
     testnet.add_argument("--validate-order", action="store_true", help="Call Binance's non-executing signed test-order endpoint.")
-    testnet_paper = sub.add_parser("testnet-paper", help="One dry-run strategy scan using completed Binance Futures testnet candles.")
-    testnet_paper.add_argument("--universe-file", type=Path, default=Path("deploy_universe.json"))
+    testnet_paper = sub.add_parser("testnet-paper", help="Run one stateful, no-order paper portfolio cycle using Binance Futures testnet data.")
     testnet_paper.add_argument("--selection", type=Path, default=Path("strategy_v1.json"))
     testnet_paper.add_argument("--state-file", type=Path, default=Path("state/testnet_paper.json"))
     testnet_paper.add_argument("--starting-equity", type=float, default=5_000.0)
-    testnet_paper.add_argument("--max-symbols", type=int, default=50)
-    testnet_paper.add_argument("--validate-orders", action="store_true", help="Validate proposed orders with Binance; no orders execute.")
+    testnet_paper.add_argument("--max-markets", type=int, default=100)
     args = parser.parse_args()
     config = BacktestConfig()
     if args.command == "testnet-check":
@@ -81,34 +80,9 @@ def main() -> None:
             min_abs_score=float(selected["min_abs_score"]), max_gross_leverage=float(selected["max_gross_leverage"]),
             max_position_equity_fraction=float(selected["max_position_equity_fraction"]),
         )
-        universe_symbols = json.loads(args.universe_file.read_text())["symbols"]
         client = BinanceFuturesTestnetClient()
-        prices, errors = client.hourly_price_frames(universe_symbols[:args.max_symbols])
-        if len(prices) < 10:
-            raise SystemExit(f"Only {len(prices)} testnet symbols returned enough history; cannot form a meaningful cross-sectional scan.")
-        desired = PaperTrader(config, args.state_file).desired_positions(prices)
-        # The selected model sizes each new position as a fraction of account equity.
-        position_notional = args.starting_equity * float(config.max_position_equity_fraction or 0)
-        intents = []
-        for target in desired:
-            price = float(prices[target["symbol"]].iloc[-1].close)
-            quantity = client.quantity_for_notional(position_notional, price, client.symbol_rules(target["symbol"]))
-            intent = {**target, "side": target["side"], "order_side": "BUY" if target["side"] == "long" else "SELL",
-                      "last_close": price, "notional_usdt": position_notional, "quantity": quantity}
-            if args.validate_orders:
-                client.validate_market_order(intent["symbol"], intent["order_side"], quantity)
-                intent["test_order_validation"] = "accepted (not executed)"
-            intents.append(intent)
-        payload = {"environment": "Binance USD(S)-M Futures testnet", "mode": "dry_run",
-                   "completed_hour": str(max(frame.index.max() for frame in prices.values())),
-                   "symbols_requested": min(args.max_symbols, len(universe_symbols)), "symbols_loaded": len(prices),
-                   "unavailable_symbols": errors, "starting_equity_usdt": args.starting_equity,
-                   "position_notional_usdt": position_notional,
-                   "maximum_gross_exposure_usdt": args.starting_equity * float(config.max_gross_leverage),
-                   "proposed_orders": intents}
-        args.state_file.parent.mkdir(parents=True, exist_ok=True)
-        args.state_file.write_text(json.dumps(payload, indent=2, default=str))
-        print(json.dumps(payload, indent=2, default=str))
+        portfolio = TestnetPaperPortfolio(config, client, args.state_file, args.starting_equity, args.max_markets)
+        print(json.dumps(portfolio.run_once(), indent=2, default=str))
         return
     universe_path = args.data_dir / "universe.json"
     if args.command == "download":

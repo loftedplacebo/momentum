@@ -62,6 +62,24 @@ class BinanceFuturesTestnetClient:
     def exchange_info(self) -> dict:
         return self._request("GET", "/fapi/v1/exchangeInfo")
 
+    def live_universe(self, config, limit: int = 100, min_listing_age_days: int = 30) -> list[str]:
+        """Current liquid USD(S)-M perpetuals for live paper trading, not the backtest universe."""
+        exchange = self.exchange_info()
+        tickers = {item["symbol"]: item for item in self._request("GET", "/fapi/v1/ticker/24hr")}
+        now_ms = int(time.time() * 1000)
+        candidates: list[tuple[str, float]] = []
+        for item in exchange["symbols"]:
+            symbol = item["symbol"]
+            listed_at = int(item.get("onboardDate", 0))
+            age_ok = not listed_at or now_ms - listed_at >= min_listing_age_days * 86_400_000
+            if (item.get("contractType") != "PERPETUAL" or item.get("quoteAsset") != "USDT"
+                    or item.get("status") != "TRADING" or item.get("baseAsset") in config.stablecoin_bases or not age_ok):
+                continue
+            quote_volume = float(tickers.get(symbol, {}).get("quoteVolume", 0.0))
+            if quote_volume >= config.min_quote_volume:
+                candidates.append((symbol, quote_volume))
+        return [symbol for symbol, _ in sorted(candidates, key=lambda item: item[1], reverse=True)[:limit]]
+
     def symbol_rules(self, symbol: str) -> SymbolRules:
         info = self.exchange_info()
         details = next((item for item in info["symbols"] if item["symbol"] == symbol), None)

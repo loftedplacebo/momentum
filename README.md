@@ -35,9 +35,9 @@ python -m crypto_momentum.cli paper --state-file state/paper.json
 # This is dry-run and does not place an order.
 python -m crypto_momentum.cli testnet-check --symbol BTCUSDT --position-notional 5000
 
-# One complete hourly signal scan using testnet candles. This starts a $5,000
-# simulated account, so the selected 15% sizing produces initial $750 positions.
-# It writes proposed orders to state/testnet_paper.json but cannot execute them.
+# One stateful paper-portfolio cycle using the current liquid Futures testnet
+# universe (up to 100 markets). This starts a $5,000 simulated account, so the
+# selected 15% sizing produces initial $750 positions. It never submits orders.
 python -m crypto_momentum.cli testnet-paper --starting-equity 5000
 
 # Optional: validates an order with Binance's non-executing test-order endpoint.
@@ -61,7 +61,7 @@ The default entry timing rule requires a directionally aligned 20-hour price bre
 - Binance public endpoints are subject to geographic/network availability and rate limits. Use a data vendor for institutional-quality historical coverage.
 - This is research software, not investment advice. Paper trade before any live deployment.
 - `testnet-check` uses the Binance USD(S)-M Futures **testnet** only. It is dry-run by default; even its optional validation call uses Binance's non-executing test-order route. The API adapter contains a separate testnet-only submission method for the later VPS phase, but the CLI intentionally does not expose live or testnet order submission yet.
-- For VPS deployment, `strategy_v1.json` contains the selected model parameters and `deploy_universe.json` contains its initial 50-market universe. Historical data, research outputs, logs, and local state are intentionally excluded from Git.
+- For VPS deployment, `strategy_v1.json` contains the selected model parameters. The live paper portfolio refreshes the current liquid, non-stable USDT perpetual universe daily (up to 100 contracts); historical data, research outputs, logs, and local state are intentionally excluded from Git.
 
 ## Structure
 
