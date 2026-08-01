@@ -146,7 +146,8 @@ def main() -> None:
             rank_exit_threshold=int(selected["rank_exit_threshold"]), stop_loss_pct=float(selected["stop_loss_pct"]),
             trailing_profit_pct=float(selected["trailing_profit_pct"]), trailing_activation_pct=float(selected["trailing_activation_pct"]),
             breakout_lookback_hours=int(selected["breakout_lookback_hours"]) * scale,
-            max_pairwise_correlation=float(selected["max_pairwise_correlation"]), time_stop_hours=int(selected["time_stop_hours"]) * scale,
+            # This setting is calendar time, unlike indicator lookbacks which are bar counts.
+            max_pairwise_correlation=float(selected["max_pairwise_correlation"]), time_stop_hours=int(selected["time_stop_hours"]),
             min_abs_score=float(selected["min_abs_score"]), max_gross_leverage=float(selected["max_gross_leverage"]),
             max_position_equity_fraction=float(selected["max_position_equity_fraction"]),
             momentum_hours=tuple(hours * scale for hours in config.momentum_hours),
@@ -172,7 +173,8 @@ def main() -> None:
             rank_exit_threshold=int(selected["rank_exit_threshold"]), stop_loss_pct=float(selected["stop_loss_pct"]),
             trailing_profit_pct=float(selected["trailing_profit_pct"]), trailing_activation_pct=float(selected["trailing_activation_pct"]),
             breakout_lookback_hours=int(selected["breakout_lookback_hours"]) * scale,
-            max_pairwise_correlation=float(selected["max_pairwise_correlation"]), time_stop_hours=int(selected["time_stop_hours"]) * scale,
+            # Keep the selected 48-hour maximum hold at 48 calendar hours on 15-minute data.
+            max_pairwise_correlation=float(selected["max_pairwise_correlation"]), time_stop_hours=int(selected["time_stop_hours"]),
             min_abs_score=float(selected["min_abs_score"]), max_gross_leverage=float(selected["max_gross_leverage"]),
             max_position_equity_fraction=float(selected["max_position_equity_fraction"]),
             momentum_hours=tuple(hours * scale for hours in config.momentum_hours),
