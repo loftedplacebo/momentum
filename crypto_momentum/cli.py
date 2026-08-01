@@ -15,6 +15,7 @@ from .signals import build_signal_frame
 from .universe import BinanceUniverseProvider, UniverseSnapshot
 from .testnet import BinanceFuturesTestnetClient
 from .live_paper import TestnetPaperPortfolio
+from .kucoin import KuCoinFuturesProvider, KuCoinKlineDownloader
 
 
 def main() -> None:
@@ -25,6 +26,11 @@ def main() -> None:
     down.add_argument("--data-dir", type=Path, default=Path("data"))
     down.add_argument("--combined-file", type=Path, default=None)
     down.add_argument("--interval", choices=("15m", "1h"), default="1h")
+    kucoin_down = sub.add_parser("kucoin-download", help="Download public KuCoin USDT perpetual candles and funding.")
+    kucoin_down.add_argument("--months", type=int, default=12)
+    kucoin_down.add_argument("--data-dir", type=Path, default=Path("data"))
+    kucoin_down.add_argument("--interval", choices=("15m", "1h"), default="1h")
+    kucoin_down.add_argument("--max-markets", type=int, default=100)
     run = sub.add_parser("backtest")
     run.add_argument("--data-dir", type=Path, default=Path("data"))
     run.add_argument("--output-dir", type=Path, default=Path("results"))
@@ -105,6 +111,14 @@ def main() -> None:
         if args.combined_file:
             combine_price_data(args.data_dir, snapshot.symbols, args.combined_file)
         print(f"Saved {len(snapshot.symbols)} symbols to {args.data_dir}")
+        return
+    if args.command == "kucoin-download":
+        download_config = replace(config, min_listing_age_days=args.months * 31 + 30)
+        snapshot = KuCoinFuturesProvider(download_config).select(args.max_markets)
+        snapshot.save(universe_path)
+        start, end = default_date_range(args.months)
+        KuCoinKlineDownloader(args.interval).download(snapshot.symbols, start, end, args.data_dir)
+        print(f"Saved {len(snapshot.symbols)} KuCoin symbols to {args.data_dir}")
         return
     snapshot = UniverseSnapshot.load(universe_path)
     prices = load_price_data(args.data_dir, snapshot.symbols)
