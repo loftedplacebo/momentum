@@ -1,0 +1,14 @@
+[Unit]
+Description=Momentum testnet dry-run scanner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/momentum
+ExecStart=/bin/bash -lc 'while true; do /opt/momentum/.venv/bin/python -m crypto_momentum.cli testnet-paper --starting-equity 5000; sleep 3600; done'
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target
