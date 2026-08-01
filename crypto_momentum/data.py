@@ -39,11 +39,9 @@ class BinanceKlineDownloader:
         end_ms = int(end.timestamp() * 1000)
         rows = []
         while cursor < end_ms:
-            response = self.session.get(BASE_URL + "/fapi/v1/klines", params={
+            batch = self._request_json("/fapi/v1/klines", {
                 "symbol": symbol, "interval": self.interval, "startTime": cursor, "endTime": end_ms, "limit": 1500,
-            }, timeout=30)
-            response.raise_for_status()
-            batch = response.json()
+            })
             if not batch:
                 break
             rows.extend(batch)
@@ -62,11 +60,9 @@ class BinanceKlineDownloader:
         cursor, end_ms = int(start.timestamp() * 1000), int(end.timestamp() * 1000)
         rows = []
         while cursor < end_ms:
-            response = self.session.get(BASE_URL + "/fapi/v1/fundingRate", params={
+            batch = self._request_json("/fapi/v1/fundingRate", {
                 "symbol": symbol, "startTime": cursor, "endTime": end_ms, "limit": 1000,
-            }, timeout=30)
-            response.raise_for_status()
-            batch = response.json()
+            })
             if not batch:
                 break
             rows.extend(batch)
@@ -78,6 +74,19 @@ class BinanceKlineDownloader:
             "timestamp": pd.to_datetime([x["fundingTime"] for x in rows], unit="ms", utc=True),
             "funding_rate": pd.to_numeric([x["fundingRate"] for x in rows]),
         })
+
+    def _request_json(self, path: str, params: dict) -> list:
+        """Retry transient Binance timeouts/rate limits without losing progress."""
+        for attempt in range(4):
+            try:
+                response = self.session.get(BASE_URL + path, params=params, timeout=30)
+                response.raise_for_status()
+                return response.json()
+            except requests.RequestException:
+                if attempt == 3:
+                    raise
+                time.sleep(1.5 * (attempt + 1))
+        raise RuntimeError("Unreachable retry state.")
 
 
 def load_price_data(data_dir: Path, symbols: list[str]) -> dict[str, pd.DataFrame]:
