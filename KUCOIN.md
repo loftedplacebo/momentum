@@ -15,14 +15,14 @@ the signal survives on a different perpetual-futures venue.
 
 ## Commands
 
-Hourly project (`C:\kucoin\1hr`):
+Hourly project (`C:\Momentum\kucoin\1hr`):
 
 ```powershell
 python -m crypto_momentum.cli kucoin-download --months 12 --interval 1h --data-dir data
 python -m crypto_momentum.cli backtest-winning --data-dir data --output-dir results_kucoin_1hr --bar-minutes 60
 ```
 
-Active 15-minute project (`C:\kucoin\15m`):
+Active 15-minute project (`C:\Momentum\kucoin\15m`):
 
 ```powershell
 python -m crypto_momentum.cli kucoin-download --months 12 --interval 15m --data-dir data

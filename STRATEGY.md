@@ -28,13 +28,13 @@ is used first.
 
 ## `1hr` project
 
-`C:\binance\1hr` is the original research and paper-trading project. One bar is
+`C:\Momentum\binance\1hr` is the original research and paper-trading project. One bar is
 one hour: momentum lookbacks are 24/72/168 hours, breakout is 36 hours, and
 maximum hold is 48 hours. The VPS paper portfolio uses this version.
 
 ## `15m` project
 
-`C:\binance\15m` is a separate, deliberately more active strategy. It evaluates
+`C:\Momentum\binance\15m` is a separate, deliberately more active strategy. It evaluates
 the same momentum concept every 15 minutes, rather than holding hourly signals.
 Time-equivalent lookbacks are scaled by four:
 

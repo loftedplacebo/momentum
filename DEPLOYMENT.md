@@ -3,14 +3,14 @@
 ## Repository
 
 - GitHub: `https://github.com/loftedplacebo/momentum.git`
-- Local hourly project: `C:\binance\1hr`
-- Local 15-minute research project: `C:\binance\15m`
+- Local hourly project: `C:\Momentum\binance\1hr`
+- Local 15-minute research project: `C:\Momentum\binance\15m`
 
 Create a clean local copy:
 
 ```powershell
-git clone https://github.com/loftedplacebo/momentum.git C:\binance\new-copy
-cd C:\binance\new-copy
+git clone https://github.com/loftedplacebo/momentum.git C:\Momentum\new-copy
+cd C:\Momentum\new-copy
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -19,7 +19,7 @@ pip install -r requirements.txt
 Update either existing local project:
 
 ```powershell
-cd C:\binance\1hr  # or C:\binance\15m
+cd C:\Momentum\binance\1hr  # or C:\Momentum\binance\15m
 git pull origin master
 ```
 
